@@ -9,7 +9,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +40,7 @@ jobs:
           clawhub package publish . \
             --owner maref-org \
             --version "${GITHUB_REF_NAME#v}" \
+            --tags latest \
             --changelog "$(sed -n '/^## /{p; :a n; /^## /q; p; ba}' CHANGELOG.md | head -n -2)" \
             --json
 
