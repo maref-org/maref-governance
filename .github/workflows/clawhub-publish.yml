@@ -32,6 +32,9 @@ jobs:
       - name: Install clawhub CLI
         run: npm install -g clawhub
 
+      - name: Login to ClawHub
+        run: clawhub login --token "${{ secrets.CLAWHUB_TOKEN }}"
+
       - name: Publish to ClawHub
         run: |
           clawhub package publish . \
@@ -39,8 +42,6 @@ jobs:
             --version "${GITHUB_REF_NAME#v}" \
             --changelog "$(sed -n '/^## /{p; :a n; /^## /q; p; ba}' CHANGELOG.md | head -n -2)" \
             --json
-        env:
-          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
