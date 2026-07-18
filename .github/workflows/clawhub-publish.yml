@@ -1,0 +1,50 @@
+name: Publish to ClawHub
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install clawhub CLI
+        run: npm install -g clawhub
+
+      - name: Publish to ClawHub
+        run: |
+          clawhub package publish . \
+            --owner maref-org \
+            --version "${GITHUB_REF_NAME#v}" \
+            --changelog "$(sed -n '/^## /{p; :a n; /^## /q; p; ba}' CHANGELOG.md | head -n -2)" \
+            --json
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "maref-governance ${{ github.ref_name }}"
+          body_path: CHANGELOG.md
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
