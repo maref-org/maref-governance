@@ -200,16 +200,20 @@ export default definePluginEntry({
 
       try {
         if (filePath) {
-          const decision = await checkedDecision(
-            "write",
-            filePath,
-            () =>
-              client.checkBeforeWrite({
-                file_path: filePath,
-                actor: ctx.agentId ?? "openclaw-agent",
-                session_id: ctx.sessionId,
-              }),
-          );
+          // 根据 toolName 区分读/写操作
+          const toolName: string = event.toolName ?? "";
+          const READ_TOOLS = new Set(["read", "Read", "view", "View"]);
+          const isRead = READ_TOOLS.has(toolName);
+          const operation = isRead ? "read" : "write";
+
+          const checkFn = isRead
+            ? () =>
+                (client as any).checkBeforeRead?.({ file_path: filePath, actor: ctx.agentId ?? "openclaw-agent", session_id: ctx.sessionId }) ??
+                client.checkBeforeWrite({ file_path: filePath, actor: ctx.agentId ?? "openclaw-agent", session_id: ctx.sessionId })
+            : () =>
+                client.checkBeforeWrite({ file_path: filePath, actor: ctx.agentId ?? "openclaw-agent", session_id: ctx.sessionId });
+
+          const decision = await checkedDecision(operation, filePath, checkFn);
           client
             .reportAction({
               action: "openclaw:before_tool_call",
@@ -222,8 +226,10 @@ export default definePluginEntry({
                 toolName: event.toolName,
               },
             })
-            .catch(() => {});
-          return resolveDecision(decision, `write ${filePath}`);
+            .catch((err: unknown) => {
+              console.warn(`[MAREF] reportAction failed (non-blocking): ${err instanceof Error ? err.message : String(err)}`);
+            });
+          return resolveDecision(decision, `${operation} ${filePath}`);
         }
         if (command) {
           const decision = await checkedDecision(
@@ -248,7 +254,9 @@ export default definePluginEntry({
                 toolName: event.toolName,
               },
             })
-            .catch(() => {});
+            .catch((err: unknown) => {
+              console.warn(`[MAREF] reportAction failed (non-blocking): ${err instanceof Error ? err.message : String(err)}`);
+            });
           return resolveDecision(decision, `execute ${command}`);
         }
       } catch (err) {
@@ -279,7 +287,9 @@ export default definePluginEntry({
           sessionKey: event.sessionKey,
           resumedFrom: event.resumedFrom ?? null,
         },
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn(`[MAREF] reportAction (session_start) failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     });
 
     // ── session_end ───────────────────────────────────────────────
@@ -302,7 +312,9 @@ export default definePluginEntry({
           transcriptArchived: event.transcriptArchived,
           nextSessionId: event.nextSessionId,
         },
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn(`[MAREF] reportAction (session_end) failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     });
 
     // ── llm_input ─────────────────────────────────────────────────
@@ -327,7 +339,9 @@ export default definePluginEntry({
           imagesCount: event.imagesCount,
           toolsCount: event.tools?.length ?? 0,
         },
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn(`[MAREF] reportAction (llm_input) failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     });
 
     // ── llm_output ────────────────────────────────────────────────
@@ -349,7 +363,9 @@ export default definePluginEntry({
           assistantTextsCount: event.assistantTexts?.length ?? 0,
           usage: event.usage ?? null,
         },
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.warn(`[MAREF] reportAction (llm_output) failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
     });
 
     // ── 安全审计收集器 ────────────────────────────────────────────

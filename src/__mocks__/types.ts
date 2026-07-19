@@ -1,1 +1,1 @@
-export type PluginHookBeforeToolCallResult = { allow: boolean; blockReason?: string };
+export type PluginHookBeforeToolCallResult = { block?: boolean; blockReason?: string };
