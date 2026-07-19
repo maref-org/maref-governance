@@ -1,6 +1,6 @@
 {
   "name": "maref-governance",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "MAREF Governance Plugin — AI agent safety enforcement with fail-closed guardrails via external MAREF sidecar",
   "type": "module",
   "license": "Apache-2.0",

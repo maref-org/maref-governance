@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (2026-07-19)
+
+- 兼容性标注: 适配 MAREF v0.37.0-dev（G2 门禁恢复 + 覆盖提升 + CI 修复）
+
 ## 0.2.0 (2026-07-18)
 
 - First standalone release extracted from `frankiehot-tech/openclaw` monorepo
