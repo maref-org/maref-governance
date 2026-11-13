@@ -1,10 +1,7 @@
 // MAREF Governance extension tests.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
-import type {
-  GateDecision,
-  GovernanceStatus,
-} from "@maref-org/sdk";
+import { SidecarError, type GuardrailDecision as GateDecision } from "./sidecar-client.ts";
 import plugin from "./index.ts";
 
 // ── Mocks ─────────────────────────────────────────────────────────────
@@ -14,7 +11,8 @@ vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({
 }));
 vi.mock("openclaw/plugin-sdk/types", () => ({}));
 
-vi.mock("@maref-org/sdk", () => {
+vi.mock("./sidecar-client.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./sidecar-client.ts")>();
   const client = {
     checkBeforeWrite: vi.fn(),
     checkBeforeExecute: vi.fn(),
@@ -23,11 +21,10 @@ vi.mock("@maref-org/sdk", () => {
   };
   // Store on global so tests can reference it
   (globalThis as any).__marefMockClient = client;
-  function MockMAREFClient() {
+  function MockSidecarClient() {
     return client;
   }
-  MockMAREFClient.prototype.constructor = MockMAREFClient;
-  return { MAREFClient: MockMAREFClient };
+  return { ...actual, SidecarClient: MockSidecarClient };
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -400,6 +397,45 @@ describe("maref-governance plugin", () => {
         { agentId: "test-agent", sessionId: "sess-1" },
       );
       expect(result).toEqual({});
+    });
+  });
+
+  describe("sidecar error classification", () => {
+    it("labels auth failures distinctly", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      globalThis.__marefMockClient.checkBeforeWrite.mockRejectedValue(
+        new SidecarError("auth", "sidecar rejected credentials (HTTP 401)", 401),
+      );
+      const result = (await getBeforeToolCallHandler()(
+        { toolName: "write", params: { file_path: "/tmp/test.txt" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      )) as { block?: boolean; blockReason?: string };
+      expect(result.block).toBe(true);
+      expect(result.blockReason).toContain("MAREF-AUTH-FAILED");
+    });
+
+    it("labels missing endpoints distinctly", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      globalThis.__marefMockClient.checkBeforeExecute.mockRejectedValue(
+        new SidecarError("endpoint_missing", "sidecar endpoint not found", 404),
+      );
+      const result = (await getBeforeToolCallHandler()(
+        { toolName: "exec", params: { command: "echo hi" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      )) as { block?: boolean; blockReason?: string };
+      expect(result.block).toBe(true);
+      expect(result.blockReason).toContain("MAREF-ENDPOINT-MISSING");
+    });
+
+    it("does not call the sidecar for read tools", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      const result = await getBeforeToolCallHandler()(
+        { toolName: "read", params: { file_path: "/tmp/test.txt" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      );
+      expect(result).toEqual({});
+      expect(globalThis.__marefMockClient.checkBeforeWrite).not.toHaveBeenCalled();
+      expect(globalThis.__marefMockClient.checkBeforeExecute).not.toHaveBeenCalled();
     });
   });
 

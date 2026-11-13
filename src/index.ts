@@ -16,7 +16,12 @@
  */
 
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
-import { MAREFClient, type GateDecision } from "@maref-org/sdk";
+import {
+  SidecarClient,
+  SidecarError,
+  type GuardrailDecision as GateDecision,
+  type SidecarErrorKind,
+} from "./sidecar-client.ts";
 import type { PluginHookBeforeToolCallResult } from "openclaw/plugin-sdk/types";
 
 // ── 类型定义 ─────────────────────────────────────────────────────────
@@ -25,11 +30,21 @@ type MAREFMode = "enforcing" | "advisory" | "logging";
 
 interface MAREFConfig {
   sidecarUrl?: string;
+  apiKey?: string;
   mode?: MAREFMode;
   failClosed?: boolean;
   cacheTtlMs?: number;
   cacheBlockTtlMs?: number;
+  timeoutMs?: number;
 }
+
+const SIDECAR_RULE_BY_KIND: Record<SidecarErrorKind, string> = {
+  auth: "MAREF-AUTH-FAILED",
+  endpoint_missing: "MAREF-ENDPOINT-MISSING",
+  unreachable: "MAREF-SIDECAR-UNREACHABLE",
+  server: "MAREF-SIDECAR-ERROR",
+  invalid_response: "MAREF-SIDECAR-ERROR",
+};
 
 /** 缓存条目 */
 interface CachedDecision {
@@ -84,10 +99,15 @@ export default definePluginEntry({
     const mode: MAREFMode = config.mode ?? "enforcing";
     const failClosed = config.failClosed ?? true;
     const sidecarUrl = config.sidecarUrl ?? "http://localhost:8000";
+    const apiKey = config.apiKey ?? process.env.MAREF_API_KEY;
     const cacheTtlMs = Math.max(0, config.cacheTtlMs ?? 30_000);
     const cacheBlockTtlMs = Math.max(0, config.cacheBlockTtlMs ?? 60_000);
 
-    const client = new MAREFClient(sidecarUrl);
+    const client = new SidecarClient({
+      baseUrl: sidecarUrl,
+      apiKey,
+      timeoutMs: config.timeoutMs,
+    });
 
     // ── 决策缓存 ──────────────────────────────────────────────────
 
@@ -200,23 +220,25 @@ export default definePluginEntry({
 
       try {
         if (filePath) {
-          // 根据 toolName 区分读/写操作
+          // 根据 toolName 区分读/写操作。sidecar 没有读保护端点，
+          // 读操作直接放行，不伪装成写检查（避免夸大 read protection）。
           const toolName: string = event.toolName ?? "";
           const READ_TOOLS = new Set(["read", "Read", "view", "View"]);
-          const isRead = READ_TOOLS.has(toolName);
-          const operation = isRead ? "read" : "write";
+          if (READ_TOOLS.has(toolName)) return {};
 
-          const checkFn = isRead
-            ? () =>
-                (client as any).checkBeforeRead?.({ file_path: filePath, actor: ctx.agentId ?? "openclaw-agent", session_id: ctx.sessionId }) ??
-                client.checkBeforeWrite({ file_path: filePath, actor: ctx.agentId ?? "openclaw-agent", session_id: ctx.sessionId })
-            : () =>
-                client.checkBeforeWrite({ file_path: filePath, actor: ctx.agentId ?? "openclaw-agent", session_id: ctx.sessionId });
-
-          const decision = await checkedDecision(operation, filePath, checkFn);
+          const operation = "write";
+          const decision = await checkedDecision(operation, filePath, () =>
+            client.checkBeforeWrite({
+              file_path: filePath,
+              actor: ctx.agentId ?? "openclaw-agent",
+              session_id: ctx.sessionId,
+            }),
+          );
           client
             .reportAction({
               action: "openclaw:before_tool_call",
+              actor: ctx.agentId ?? "openclaw-agent",
+              session_id: ctx.sessionId,
               result: {
                 verdict: decision.verdict,
                 rule_id: decision.rule_id,
@@ -245,6 +267,8 @@ export default definePluginEntry({
           client
             .reportAction({
               action: "openclaw:before_tool_call",
+              actor: ctx.agentId ?? "openclaw-agent",
+              session_id: ctx.sessionId,
               result: {
                 verdict: decision.verdict,
                 rule_id: decision.rule_id,
@@ -260,13 +284,16 @@ export default definePluginEntry({
           return resolveDecision(decision, `execute ${command}`);
         }
       } catch (err) {
+        const kind: SidecarErrorKind = err instanceof SidecarError ? err.kind : "unreachable";
+        const rule = SIDECAR_RULE_BY_KIND[kind];
+        const detail = err instanceof Error ? err.message : String(err);
         if (failClosed && mode === "enforcing") {
           return {
             block: true,
-            blockReason: `[MAREF] FAIL-CLOSED: Sidecar unreachable: ${err instanceof Error ? err.message : String(err)}`,
+            blockReason: `[MAREF] FAIL-CLOSED ${kind}: ${detail} (rule ${rule})`,
           };
         }
-        console.warn(`[MAREF] Sidecar error (fail-open): ${err}`);
+        console.warn(`[MAREF] Sidecar error (${kind}, fail-open): ${detail}`);
         return {};
       }
       return {};

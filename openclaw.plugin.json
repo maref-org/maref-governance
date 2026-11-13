@@ -26,6 +26,16 @@
         "description": "Block operations when sidecar is unreachable (enforcing mode only)",
         "default": true
       },
+      "apiKey": {
+        "type": "string",
+        "description": "Bearer token for the sidecar. Prefer setting MAREF_API_KEY instead of inline config"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "description": "Per-request timeout in ms (default: 3000)",
+        "default": 3000,
+        "minimum": 100
+      },
       "cacheTtlMs": {
         "type": "number",
         "description": "TTL for cached allow decisions in ms (default: 30000, 0 to disable)",

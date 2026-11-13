@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4 (2026-11-13)
+
+- 改用 sidecar 真实端点：`/api/v1/guardrails/check-before-write` 与 `check-before-execute`
+  （旧 SDK 的 `/api/governance/check` 已于 2026-08-13 软弃用，实际 404）
+- 请求携带 Bearer token（`apiKey` 配置或 `MAREF_API_KEY` 环境变量）
+- 移除 `@maref-org/sdk` 依赖，审计上报改走 `/api/v1/guardrails/actions`
+- 错误分类：`auth` / `endpoint_missing` / `unreachable` / `server` / `invalid_response`，
+  blockReason 带对应 rule id，不再一律报 "Sidecar unreachable"
+- 不再拦截读工具：sidecar 无读保护端点，插件不再用写检查伪装读保护
+- README 修正安装命令与配置键（`plugins.entries` + `plugins.allow`）
+
 ## 0.2.3 (2026-11-13)
 
 - 修复 `openclaw.install.minHostVersion` 格式：必须是 semver floor `>=2026.7.2`

@@ -1,6 +1,6 @@
 {
   "name": "maref-governance",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "MAREF Governance Plugin — AI agent safety enforcement with fail-closed guardrails via external MAREF sidecar",
   "type": "module",
   "license": "Apache-2.0",
@@ -34,13 +34,10 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",
-    "vitest": "^3.0.0",
     "typescript": "^5.5",
-    "@types/node": "^22.0.0"
-  },
-  "dependencies": {
-    "@maref-org/sdk": "^0.2.0"
+    "vitest": "^3.0.0"
   },
   "peerDependencies": {
     "openclaw": ">=2026.7.2"

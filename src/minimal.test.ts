@@ -5,7 +5,7 @@ vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({
 }));
 vi.mock("openclaw/plugin-sdk/types", () => ({}));
 
-vi.mock("@maref-org/sdk", () => {
+vi.mock("./sidecar-client.ts", () => {
   const client = {
     checkBeforeWrite: vi.fn().mockResolvedValue({ verdict: "allow" }),
     checkBeforeExecute: vi.fn(),
@@ -13,11 +13,13 @@ vi.mock("@maref-org/sdk", () => {
     getGovernanceStatus: vi.fn(),
   };
   (globalThis as any).__marefMockClient2 = client;
-  function MockMAREFClient() {
+  function MockSidecarClient() {
     return client;
   }
-  MockMAREFClient.prototype.constructor = MockMAREFClient;
-  return { MAREFClient: MockMAREFClient };
+  return {
+    SidecarClient: MockSidecarClient,
+    SidecarError: class SidecarError extends Error {},
+  };
 });
 
 import plugin from "./index.ts";

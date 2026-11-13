@@ -5,14 +5,16 @@
 
 # MAREF Governance Plugin
 
-**AI agent safety enforcement with fail-closed guardrails — intercepts file writes, command execution, and sensitive reads at the plugin level.**
+**AI agent safety enforcement with fail-closed guardrails — intercepts file writes and command execution at the plugin level.**
 
 [![npm](https://img.shields.io/npm/v/maref-governance)](https://www.npmjs.com/package/maref-governance)
 [![ClawHub](https://img.shields.io/badge/ClawHub-maref--governance-7B2FBE)](https://clawhub.com/packages/maref-governance)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/maref-org/maref-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/maref-org/maref-governance/actions/workflows/ci.yml)
 
-A plugin for [OpenClaw](https://openclaw.ai) that enforces governance policies at runtime by delegating every tool invocation to an external [MAREF](https://maref.cc) sidecar. When the sidecar is unreachable, the plugin **fails closed** — blocking operations rather than allowing them silently.
+A plugin for [OpenClaw](https://openclaw.ai) that checks file writes and command execution against an external [MAREF](https://maref.cc) sidecar. When the sidecar is unreachable, rejects credentials, or lacks the expected endpoint, the plugin **fails closed** — blocking the operation rather than allowing it silently.
+
+> Read tools are **not** intercepted. The sidecar exposes no read-protection endpoint, so the plugin does not pretend to protect reads.
 
 ---
 
@@ -30,9 +32,8 @@ A plugin for [OpenClaw](https://openclaw.ai) that enforces governance policies a
                     │  MAREF Sidecar        │
                     │  (external process)   │
                     ├──────────────────────┤
-                    │  checkBeforeWrite()   │
-                    │  checkBeforeExecute() │
-                    │  checkBeforeRead()    │
+                    │  check-before-write     │
+                    │  check-before-execute   │
                     └──────┬───────────────┘
                            │ allow / block / hitl_required
                            ▼
@@ -62,7 +63,7 @@ Each tool call is intercepted **before execution**. The plugin:
 | **Fail-open** | Sidecar unreachable → warn but allow (advisory/logging modes, or enforcing with `failClosed: false`) |
 | **Decision cache** | Allow decisions cached for 30s, block decisions for 60s (configurable) |
 | **HITL bypass** | `hitl_required` verdicts skip cache — every call re-queries the sidecar |
-| **Read/write distinction** | Read tools (`Read`, `View`) use `checkBeforeRead`; write tools use `checkBeforeWrite` |
+| **Write/exec only** | Write tools call `check-before-write`; exec tools call `check-before-execute`. Read tools pass through and are not protected |
 | **Session tracking** | Reports session start/end, LLM input/output metadata to sidecar for audit |
 | **Security audit collector** | Exposes governance state, circuit breaker status, and cache stats for monitoring |
 
@@ -73,33 +74,39 @@ Each tool call is intercepted **before execution**. The plugin:
 ### Via ClawHub (recommended)
 
 ```bash
-clawhub install maref-governance
+openclaw plugins install clawhub:maref-governance@latest
 ```
 
 ### Via npm
 
 ```bash
-npm install maref-governance
+npm install -g maref-governance
+openclaw plugins install maref-governance
 ```
 
 ### Manual (OpenClaw config)
 
-Add to your OpenClaw configuration:
+Add to `~/.openclaw/openclaw.json`:
 
 ```json
 {
-  "extensions": {
-    "maref-governance": {
-      "source": "clawhub:maref-governance",
-      "config": {
-        "mode": "enforcing",
-        "sidecarUrl": "http://localhost:8941",
-        "failClosed": true
+  "plugins": {
+    "allow": ["maref-governance"],
+    "entries": {
+      "maref-governance": {
+        "enabled": true,
+        "config": {
+          "mode": "enforcing",
+          "sidecarUrl": "http://127.0.0.1:8931",
+          "failClosed": true
+        }
       }
     }
   }
 }
 ```
+
+Set `MAREF_API_KEY` in the environment so the plugin can authenticate. The sidecar rejects unauthenticated requests with 401.
 
 ---
 
@@ -109,9 +116,22 @@ Add to your OpenClaw configuration:
 |--------|------|---------|-------------|
 | `mode` | `"enforcing"` / `"advisory"` / `"logging"` | `"enforcing"` | Governance enforcement mode |
 | `sidecarUrl` | `string` | `"http://localhost:8000"` | MAREF sidecar URL |
-| `failClosed` | `boolean` | `true` | Block when sidecar unreachable (enforcing mode only) |
+| `apiKey` | `string` | `MAREF_API_KEY` env | Bearer token for the sidecar. Prefer the env var over inline config |
+| `failClosed` | `boolean` | `true` | Block when the sidecar errors (enforcing mode only) |
 | `cacheTtlMs` | `number` | `30000` | TTL for cached allow decisions (0 to disable) |
 | `cacheBlockTtlMs` | `number` | `60000` | TTL for cached block decisions (0 to disable) |
+| `timeoutMs` | `number` | `3000` | Per-request timeout in ms |
+
+### Sidecar contract
+
+The plugin calls these endpoints directly (no `@maref-org/sdk` dependency):
+
+- `POST /api/v1/guardrails/check-before-write`
+- `POST /api/v1/guardrails/check-before-execute`
+- `POST /api/v1/guardrails/actions` (best-effort audit)
+- `GET /api/status` (security audit collector)
+
+Errors are classified as `auth` (401/403), `endpoint_missing` (404), `unreachable`, `server` (5xx), or `invalid_response`. In `enforcing` mode with `failClosed: true`, every class blocks; the reason includes the class and a rule id (`MAREF-AUTH-FAILED`, `MAREF-ENDPOINT-MISSING`, `MAREF-SIDECAR-UNREACHABLE`, `MAREF-SIDECAR-ERROR`).
 
 ### Modes
 
