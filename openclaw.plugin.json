@@ -36,6 +36,11 @@
         "default": 3000,
         "minimum": 100
       },
+      "localPolicy": {
+        "type": "boolean",
+        "description": "Run local sensitive-path / dangerous-command checks before calling the sidecar (default: true)",
+        "default": true
+      },
       "cacheTtlMs": {
         "type": "number",
         "description": "TTL for cached allow decisions in ms (default: 30000, 0 to disable)",

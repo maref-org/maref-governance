@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.5 (2026-11-13)
+
+- 新增本地确定性策略层（`localPolicy`，默认开启），在调用 sidecar 之前拦截：
+  - 写入敏感文件：`.env`（排除 `.example/.sample/.template`）、`.npmrc/.netrc/.pgpass/credentials`、
+    `id_rsa/id_ed25519/id_ecdsa`、`.pem/.key/.p12/.pfx/.jks/.keystore`、
+    `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.config/gh`、`~/Library/Keychains`
+  - 高危命令：`rm -rf /`、`rm -rf ~`、系统目录递归删除、`mkfs`、`dd of=/dev/*`、
+    fork bomb、`chmod 777 /`、`curl|wget ... | sh`、`sudo rm -r`
+- 规则 id：`MAREF-LOCAL-SENSITIVE-FILE`、`MAREF-LOCAL-DANGEROUS-COMMAND`
+- 其余操作仍交给 sidecar 判定；`advisory` 模式只告警不阻断
+
 ## 0.2.4 (2026-11-13)
 
 - 改用 sidecar 真实端点：`/api/v1/guardrails/check-before-write` 与 `check-before-execute`

@@ -22,6 +22,7 @@ import {
   type GuardrailDecision as GateDecision,
   type SidecarErrorKind,
 } from "./sidecar-client.ts";
+import { checkLocalExecute, checkLocalWrite } from "./local-policy.ts";
 import type { PluginHookBeforeToolCallResult } from "openclaw/plugin-sdk/types";
 
 // ── 类型定义 ─────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ interface MAREFConfig {
   cacheTtlMs?: number;
   cacheBlockTtlMs?: number;
   timeoutMs?: number;
+  localPolicy?: boolean;
 }
 
 const SIDECAR_RULE_BY_KIND: Record<SidecarErrorKind, string> = {
@@ -100,6 +102,7 @@ export default definePluginEntry({
     const failClosed = config.failClosed ?? true;
     const sidecarUrl = config.sidecarUrl ?? "http://localhost:8000";
     const apiKey = config.apiKey ?? process.env.MAREF_API_KEY;
+    const localPolicy = config.localPolicy ?? true;
     const cacheTtlMs = Math.max(0, config.cacheTtlMs ?? 30_000);
     const cacheBlockTtlMs = Math.max(0, config.cacheBlockTtlMs ?? 60_000);
 
@@ -226,6 +229,19 @@ export default definePluginEntry({
           const READ_TOOLS = new Set(["read", "Read", "view", "View"]);
           if (READ_TOOLS.has(toolName)) return {};
 
+          // 本地确定性规则先于 sidecar：敏感路径直接拒绝，不依赖网络。
+          if (localPolicy) {
+            const local = checkLocalWrite(filePath);
+            if (local.deny) {
+              const reason = `[MAREF] BLOCKED write ${filePath} — rule ${local.rule}: ${local.reason}`;
+              if (mode === "advisory") {
+                console.warn(`[MAREF] ADVISORY — would BLOCK write: ${reason}`);
+                return {};
+              }
+              return { block: true, blockReason: reason };
+            }
+          }
+
           const operation = "write";
           const decision = await checkedDecision(operation, filePath, () =>
             client.checkBeforeWrite({
@@ -254,6 +270,19 @@ export default definePluginEntry({
           return resolveDecision(decision, `${operation} ${filePath}`);
         }
         if (command) {
+          // 本地确定性规则先于 sidecar：明显高危命令直接拒绝。
+          if (localPolicy) {
+            const local = checkLocalExecute(command);
+            if (local.deny) {
+              const reason = `[MAREF] BLOCKED execute ${command} — rule ${local.rule}: ${local.reason}`;
+              if (mode === "advisory") {
+                console.warn(`[MAREF] ADVISORY — would BLOCK execute: ${reason}`);
+                return {};
+              }
+              return { block: true, blockReason: reason };
+            }
+          }
+
           const decision = await checkedDecision(
             "execute",
             command,

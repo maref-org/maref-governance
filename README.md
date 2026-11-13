@@ -121,6 +121,21 @@ Set `MAREF_API_KEY` in the environment so the plugin can authenticate. The sidec
 | `cacheTtlMs` | `number` | `30000` | TTL for cached allow decisions (0 to disable) |
 | `cacheBlockTtlMs` | `number` | `60000` | TTL for cached block decisions (0 to disable) |
 | `timeoutMs` | `number` | `3000` | Per-request timeout in ms |
+| `localPolicy` | `boolean` | `true` | Run local sensitive-path / dangerous-command checks before the sidecar |
+
+### Local policy (default on)
+
+Runs before any network call, so it still protects when the sidecar is down or unconfigured.
+
+- **Writes**: `.env` (except `.example`/`.sample`/`.template`), `.npmrc`, `.netrc`, `.pgpass`,
+  `credentials`, `id_rsa`, `id_ed25519`, `id_ecdsa`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`,
+  `.keystore`, and anything under `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config/gh`,
+  `~/Library/Keychains` → rule `MAREF-LOCAL-SENSITIVE-FILE`
+- **Commands**: `rm -rf /`, `rm -rf ~`, recursive delete of a system directory, `mkfs`,
+  `dd of=/dev/*`, fork bomb, `chmod 777 /`, `curl|wget ... | sh`, `sudo rm -r`
+  → rule `MAREF-LOCAL-DANGEROUS-COMMAND`
+
+Everything else is delegated to the sidecar. Set `localPolicy: false` to disable.
 
 ### Sidecar contract
 

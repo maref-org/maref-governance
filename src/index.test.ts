@@ -439,6 +439,73 @@ describe("maref-governance plugin", () => {
     });
   });
 
+  describe("local policy", () => {
+    it("blocks sensitive files before calling the sidecar", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      const result = (await getBeforeToolCallHandler()(
+        { toolName: "write", params: { file_path: "/tmp/.env" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      )) as { block?: boolean; blockReason?: string };
+      expect(result.block).toBe(true);
+      expect(result.blockReason).toContain("MAREF-LOCAL-SENSITIVE-FILE");
+      expect(globalThis.__marefMockClient.checkBeforeWrite).not.toHaveBeenCalled();
+    });
+
+    it("blocks ssh keys", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      const result = (await getBeforeToolCallHandler()(
+        { toolName: "write", params: { file_path: "~/.ssh/id_ed25519" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      )) as { block?: boolean; blockReason?: string };
+      expect(result.block).toBe(true);
+      expect(result.blockReason).toContain("MAREF-LOCAL-SENSITIVE-FILE");
+    });
+
+    it("does not block .env.example", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      globalThis.__marefMockClient.checkBeforeWrite.mockResolvedValue(makeAllowDecision());
+      const result = await getBeforeToolCallHandler()(
+        { toolName: "write", params: { file_path: "/tmp/.env.example" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      );
+      expect(result).toEqual({});
+      expect(globalThis.__marefMockClient.checkBeforeWrite).toHaveBeenCalled();
+    });
+
+    it("blocks dangerous commands before calling the sidecar", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      const result = (await getBeforeToolCallHandler()(
+        { toolName: "exec", params: { command: "rm -rf /" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      )) as { block?: boolean; blockReason?: string };
+      expect(result.block).toBe(true);
+      expect(result.blockReason).toContain("MAREF-LOCAL-DANGEROUS-COMMAND");
+      expect(globalThis.__marefMockClient.checkBeforeExecute).not.toHaveBeenCalled();
+    });
+
+    it("allows ordinary commands through to the sidecar", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      globalThis.__marefMockClient.checkBeforeExecute.mockResolvedValue(makeAllowDecision());
+      const result = await getBeforeToolCallHandler()(
+        { toolName: "exec", params: { command: "echo hi" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      );
+      expect(result).toEqual({});
+      expect(globalThis.__marefMockClient.checkBeforeExecute).toHaveBeenCalled();
+    });
+
+    it("can be disabled with localPolicy: false", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true, localPolicy: false });
+      globalThis.__marefMockClient.checkBeforeWrite.mockResolvedValue(makeAllowDecision());
+      const result = await getBeforeToolCallHandler()(
+        { toolName: "write", params: { file_path: "/tmp/.env" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      );
+      expect(result).toEqual({});
+      expect(globalThis.__marefMockClient.checkBeforeWrite).toHaveBeenCalled();
+    });
+  });
+
   describe("non-file/non-command tool calls pass through", () => {
     it("allows tools with neither file_path nor command params", async () => {
       registerPlugin({ mode: "enforcing" });
