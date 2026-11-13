@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3 (2026-11-13)
+
+- 修复 `openclaw.install.minHostVersion` 格式：必须是 semver floor `>=2026.7.2`
+  （0.2.2 写 `2026.7.2`，被 OpenClaw 2026.11.3 拒绝安装）
+
 ## 0.2.2 (2026-11-13)
 
 - 修复发布制品缺失 `dist/index.js`（0.2.1 的 ClawHub/npm 包无法加载入口）
