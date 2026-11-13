@@ -30,23 +30,32 @@ jobs:
         run: npm run build
 
       - name: Install clawhub CLI
-        run: npm install -g clawhub
+        run: npm install -g clawhub@0.26.0
 
       - name: Login to ClawHub
         run: clawhub login --token "${{ secrets.CLAWHUB_TOKEN }}"
 
       - name: Publish to ClawHub
+        id: clawhub
+        continue-on-error: true
         run: |
           clawhub package publish . \
             --owner maref-org \
             --version "${GITHUB_REF_NAME#v}" \
             --tags latest \
             --changelog "$(sed -n '/^## /{p; :a n; /^## /q; p; ba}' CHANGELOG.md | head -n -2)" \
+            --wait \
+            --wait-timeout 900 \
             --json
 
+      - name: Pack npm tarball
+        run: npm pack
+
       - name: Create GitHub Release
+        if: always()
         uses: softprops/action-gh-release@v2
         with:
           name: "maref-governance ${{ github.ref_name }}"
           body_path: CHANGELOG.md
+          files: maref-governance-*.tgz
           prerelease: ${{ contains(github.ref_name, '-rc') }}
