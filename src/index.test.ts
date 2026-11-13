@@ -215,7 +215,7 @@ describe("maref-governance plugin", () => {
   describe("registration", () => {
     it("registers before_tool_call hook and security audit collector", () => {
       registerPlugin();
-      expect(api.registerHook).toHaveBeenCalledWith(
+      expect(api.on).toHaveBeenCalledWith(
         "before_tool_call",
         expect.any(Function),
       );

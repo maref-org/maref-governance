@@ -190,7 +190,7 @@ export default definePluginEntry({
 
     // ── before_tool_call ──────────────────────────────────────────
 
-    api.registerHook("before_tool_call", async (event: any, ctx: any) => {
+    api.on("before_tool_call", async (event, ctx) => {
       if (mode === "logging") return {};
 
       const filePath = extractFilePath(event.params);

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 (2026-11-13)
+
+- 修复发布制品缺失 `dist/index.js`（0.2.1 的 ClawHub/npm 包无法加载入口）
+- 新增 `files` 白名单，确保 dist/、README、LICENSE、manifest 进入发布包
+- `before_tool_call` 改用 typed hook API `api.on(...)`（`registerHook` 为 internal hook，缺 name 会抛错）
+- 新增 `openclaw.install.minHostVersion`：`2026.7.2`
+
 ## 0.2.1 (2026-07-19)
 
 - 兼容性标注: 适配 MAREF v0.37.0-dev（G2 门禁恢复 + 覆盖提升 + CI 修复）
