@@ -7,7 +7,6 @@
 
 **AI agent safety enforcement with fail-closed guardrails — intercepts file writes and command execution at the plugin level.**
 
-[![npm](https://img.shields.io/npm/v/maref-governance)](https://www.npmjs.com/package/maref-governance)
 [![ClawHub](https://img.shields.io/badge/ClawHub-maref--governance-7B2FBE)](https://clawhub.com/packages/maref-governance)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/maref-org/maref-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/maref-org/maref-governance/actions/workflows/ci.yml)
@@ -77,11 +76,12 @@ Each tool call is intercepted **before execution**. The plugin:
 openclaw plugins install clawhub:maref-governance@latest
 ```
 
-### Via npm
+### Via GitHub Release
+
+Download the `.tgz` from the latest release, then:
 
 ```bash
-npm install -g maref-governance
-openclaw plugins install maref-governance
+openclaw plugins install ./maref-governance-<version>.tgz --force --accept-capabilities
 ```
 
 ### Manual (OpenClaw config)

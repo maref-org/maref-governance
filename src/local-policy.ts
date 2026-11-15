@@ -8,7 +8,7 @@
  */
 
 import { homedir } from "node:os";
-import { basename, extname, normalize, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 
 export interface LocalPolicyResult {
   deny: boolean;
@@ -52,7 +52,9 @@ function expandHome(input: string): string {
 }
 
 function normalizePath(input: string): string {
-  return normalize(expandHome(input));
+  // resolve（而非 normalize）才能把相对路径也转成绝对路径，
+  // 否则 `foo/../../.ssh/x` 这类路径会绕过目录规则。
+  return resolve(expandHome(input));
 }
 
 function isEnvFile(name: string): boolean {
@@ -116,7 +118,7 @@ interface DangerousPattern {
 
 const DANGEROUS_COMMANDS: DangerousPattern[] = [
   {
-    pattern: /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+\/(?:\s|$)/,
+    pattern: /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+(?:\/(?:\s|$)|\/\*(?:\s|$))/,
     reason: "recursive force delete of the filesystem root",
   },
   {

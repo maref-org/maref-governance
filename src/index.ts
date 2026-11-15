@@ -83,9 +83,14 @@ function extractCommand(params: Record<string, unknown>): string | null {
   return null;
 }
 
-/** 构造缓存 key */
-function cacheKey(operation: string, identifier: string): string {
-  return `${operation}:${identifier}`;
+/** 构造缓存 key（必须绑定 actor/session，否则跨主体复用决策） */
+function cacheKey(
+  operation: string,
+  identifier: string,
+  actor: string,
+  sessionId: string,
+): string {
+  return `${operation}:${actor}:${sessionId}:${identifier}`;
 }
 
 // ── Plugin 入口 ──────────────────────────────────────────────────────
@@ -116,11 +121,16 @@ export default definePluginEntry({
 
     const decisionCache = new Map<string, CachedDecision>();
     const stats: CacheStats = { size: 0, hits: 0, misses: 0 };
+    const MAX_CACHE_ENTRIES = 5_000;
 
     function cacheSet(key: string, decision: GateDecision): void {
       const ttl =
         decision.verdict === "block" ? cacheBlockTtlMs : cacheTtlMs;
       if (ttl <= 0) return; // 缓存禁用
+      if (decisionCache.size >= MAX_CACHE_ENTRIES) {
+        const oldest = decisionCache.keys().next().value;
+        if (oldest !== undefined) decisionCache.delete(oldest);
+      }
       decisionCache.set(key, {
         decision,
         expiresAt: Date.now() + ttl,
@@ -195,9 +205,10 @@ export default definePluginEntry({
     async function checkedDecision(
       operation: string,
       identifier: string,
+      scope: { actor: string; sessionId: string },
       checkFn: () => Promise<GateDecision>,
     ): Promise<GateDecision> {
-      const key = cacheKey(operation, identifier);
+      const key = cacheKey(operation, identifier, scope.actor, scope.sessionId);
       const cached = cacheGet(key);
       if (cached) return cached;
 
@@ -243,12 +254,19 @@ export default definePluginEntry({
           }
 
           const operation = "write";
-          const decision = await checkedDecision(operation, filePath, () =>
-            client.checkBeforeWrite({
-              file_path: filePath,
+          const decision = await checkedDecision(
+            operation,
+            filePath,
+            {
               actor: ctx.agentId ?? "openclaw-agent",
-              session_id: ctx.sessionId,
-            }),
+              sessionId: ctx.sessionId,
+            },
+            () =>
+              client.checkBeforeWrite({
+                file_path: filePath,
+                actor: ctx.agentId ?? "openclaw-agent",
+                session_id: ctx.sessionId,
+              }),
           );
           client
             .reportAction({
@@ -286,6 +304,10 @@ export default definePluginEntry({
           const decision = await checkedDecision(
             "execute",
             command,
+            {
+              actor: ctx.agentId ?? "openclaw-agent",
+              sessionId: ctx.sessionId,
+            },
             () =>
               client.checkBeforeExecute({
                 command,

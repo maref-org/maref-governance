@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.6 (2026-11-13)
+
+代码审查修复：
+
+- **决策缓存未绑定主体**：缓存 key 现包含 `actor` + `sessionId`，
+  避免 agent A 的 allow 决策被 agent B 复用（治理绕过）
+- **相对路径绕过**：本地敏感路径检查改用 `path.resolve`，
+  `foo/../.env` 之类路径不再逃逸目录规则
+- 补 `rm -rf /*` 高危模式
+- 决策缓存增加 5000 条上限，防止长会话无限增长
+- README 移除尚未发布的 npm 通道与死链 badge，改为 GitHub Release 安装
+
 ## 0.2.5 (2026-11-13)
 
 - 新增本地确定性策略层（`localPolicy`，默认开启），在调用 sidecar 之前拦截：

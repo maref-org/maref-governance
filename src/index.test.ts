@@ -504,6 +504,48 @@ describe("maref-governance plugin", () => {
       expect(result).toEqual({});
       expect(globalThis.__marefMockClient.checkBeforeWrite).toHaveBeenCalled();
     });
+
+    it("normalizes relative paths before matching", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      const result = (await getBeforeToolCallHandler()(
+        { toolName: "write", params: { file_path: "foo/../.env" } },
+        { agentId: "test-agent", sessionId: "sess-1" },
+      )) as { block?: boolean; blockReason?: string };
+      expect(result.block).toBe(true);
+      expect(result.blockReason).toContain("MAREF-LOCAL-SENSITIVE-FILE");
+    });
+  });
+
+  describe("decision cache isolation", () => {
+    it("does not reuse an allow decision across actors", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      globalThis.__marefMockClient.checkBeforeWrite.mockResolvedValue(makeAllowDecision());
+      const handler = getBeforeToolCallHandler();
+      await handler(
+        { toolName: "write", params: { file_path: "/tmp/shared.txt" } },
+        { agentId: "agent-a", sessionId: "sess-a" },
+      );
+      await handler(
+        { toolName: "write", params: { file_path: "/tmp/shared.txt" } },
+        { agentId: "agent-b", sessionId: "sess-b" },
+      );
+      expect(globalThis.__marefMockClient.checkBeforeWrite).toHaveBeenCalledTimes(2);
+    });
+
+    it("reuses an allow decision for the same actor and session", async () => {
+      registerPlugin({ mode: "enforcing", failClosed: true });
+      globalThis.__marefMockClient.checkBeforeWrite.mockResolvedValue(makeAllowDecision());
+      const handler = getBeforeToolCallHandler();
+      await handler(
+        { toolName: "write", params: { file_path: "/tmp/shared.txt" } },
+        { agentId: "agent-a", sessionId: "sess-a" },
+      );
+      await handler(
+        { toolName: "write", params: { file_path: "/tmp/shared.txt" } },
+        { agentId: "agent-a", sessionId: "sess-a" },
+      );
+      expect(globalThis.__marefMockClient.checkBeforeWrite).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("non-file/non-command tool calls pass through", () => {
